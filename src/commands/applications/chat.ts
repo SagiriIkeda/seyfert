@@ -65,6 +65,7 @@ type Wrap<N extends ApplicationCommandOptionType> = N extends
 				ok: OKFunction<any>,
 				fail: StopFunction,
 			): Awaitable<void>;
+			scope?: OptionScope;
 		} & {
 			description: string;
 			description_localizations?: APIApplicationCommandBasicOption['description_localizations'];
@@ -118,6 +119,23 @@ type ContextOptionsAux<T extends OptionsRecord> = {
 			: ReturnOptionsTypes[T[K]['type']];
 };
 
+export enum OptionScope {
+	Slash,
+	Message,
+}
+
+export type ScopedContextOptions<
+	Options extends OptionsRecord,
+	Scope extends OptionScope,
+	Ctx extends ContextOptionsAux<Options> = ContextOptionsAux<Options>,
+> = {
+	[K in keyof (Ctx | Options)]: Options[K] extends { scope: OptionScope }
+		? Options[K] extends { scope: Scope }
+			? Ctx[K]
+			: undefined
+		: Ctx[K];
+};
+
 export type ContextOptions<T extends OptionsRecord> = ContextOptionsAux<T>;
 
 export class BaseCommand {
@@ -157,15 +175,20 @@ export class BaseCommand {
 		}
 		const data: OnOptionsReturnObject = {};
 		let errored = false;
+
+		const scope = ctx.message ? OptionScope.Message : OptionScope.Slash;
+
 		for (const i of this.options ?? []) {
 			try {
-				const option = this.options!.find(x => x.name === i.name) as __CommandOption;
+				const option = <__CommandOption>i;
+				if (!(option.scope === undefined || option.scope === scope)) continue;
+
 				const value =
 					resolver.getHoisted(i.name)?.value !== undefined
 						? await new Promise(async (res, rej) => {
 								try {
-									(await option.value?.({ context: ctx, value: resolver.getValue(i.name) } as never, res, rej)) ||
-										res(resolver.getValue(i.name));
+									const value = resolver.getValue(i.name);
+									(await option.value?.({ context: ctx, value } as never, res, rej)) || res(value);
 								} catch (e) {
 									rej(e);
 								}
@@ -327,6 +350,8 @@ export class Command extends BaseCommand {
 		const options: APIApplicationCommandOption[] = [];
 
 		for (const i of this.options ?? []) {
+			if ((<__CommandOption>i).scope === OptionScope.Message) continue;
+
 			if (!(i instanceof SubCommand)) {
 				options.push({ ...i, autocomplete: 'autocomplete' in i } as APIApplicationCommandBasicOption);
 				continue;
@@ -362,10 +387,17 @@ export abstract class SubCommand extends BaseCommand {
 	declare options?: CommandOption[];
 
 	toJSON() {
+		const options: APIApplicationCommandBasicOption[] | undefined = [];
+
+		if (this.options)
+			for (const i of this.options) {
+				if ((<__CommandOption>i).scope === OptionScope.Message) continue;
+				options.push({ ...i, autocomplete: 'autocomplete' in i } as APIApplicationCommandBasicOption);
+			}
+
 		return {
 			...super.toJSON(),
-			options:
-				this.options?.map(x => ({ ...x, autocomplete: 'autocomplete' in x }) as APIApplicationCommandBasicOption) ?? [],
+			options,
 		};
 	}
 

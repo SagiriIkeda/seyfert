@@ -14,7 +14,7 @@ import { ChatInputCommandInteraction } from '../../structures';
 import { MessageFlags } from '../../types';
 import { BaseContext } from '../basecontext';
 import type { RegisteredMiddlewares } from '../decorators';
-import type { Command, ContextOptions, OptionsRecord, SubCommand } from './chat';
+import type { Command, ContextOptions, OptionScope, OptionsRecord, ScopedContextOptions, SubCommand } from './chat';
 import type { CommandMetadata, ExtendContext, GlobalMetadata, UsingClient } from './shared';
 
 export interface CommandContext<T extends OptionsRecord = {}, M extends keyof RegisteredMiddlewares = never>
@@ -209,3 +209,17 @@ export class CommandContext<
 		return true;
 	}
 }
+
+export type ScopedCommandContext<T extends OptionsRecord = {}, M extends keyof RegisteredMiddlewares = never> = If<
+	InferWithPrefix,
+	Omit<CommandContext<T, M>, 'interaction' | 'message' | 'options'> &
+		(
+			| {
+					options: ScopedContextOptions<T, OptionScope.Slash>;
+					interaction: ChatInputCommandInteraction;
+					message: undefined;
+			  }
+			| { options: ScopedContextOptions<T, OptionScope.Message>; interaction: undefined; message: MessageStructure }
+		),
+	Omit<CommandContext<T, M>, 'options'> & { options: ScopedContextOptions<T, OptionScope.Slash> }
+>;
