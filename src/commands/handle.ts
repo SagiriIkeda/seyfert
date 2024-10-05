@@ -11,6 +11,7 @@ import {
 	IgnoreCommand,
 	MenuCommandContext,
 	type MessageCommandOptionErrors,
+	OptionScope,
 	type RegisteredMiddlewares,
 	type SeyfertChannelOption,
 	type SeyfertIntegerOption,
@@ -648,6 +649,7 @@ export class HandleCommand {
 		for (const i of (command.options ?? []) as (CommandOption & {
 			type: ApplicationCommandOptionType;
 		})[]) {
+			if (i.scope === OptionScope.Slash) continue;
 			try {
 				let value: string | boolean | number | undefined;
 				switch (i.type) {
